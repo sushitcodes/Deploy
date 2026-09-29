@@ -1,0 +1,176 @@
+import { useState } from "react";
+import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { useGetClassRoomsQuery } from "../../infrastructure/api/classRoomApi";
+import {
+  useGetAttendanceSheetQuery,
+  downloadAttendanceSheet,
+} from "../../infrastructure/api/attendanceApi";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
+
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
+import { CalendarIcon, Download } from "lucide-react";
+import { toast } from "sonner";
+import { IdSelect } from "../components/IdSelect";
+import { PageHeader } from "../components/PageHeader";
+const STATUS_BADGE: Record<string, string> = {
+  Present: "bg-green-100 text-green-800",
+  Absent: "bg-red-100 text-red-800",
+  Late: "bg-amber-100 text-amber-800",
+  Excused: "bg-indigo-100 text-indigo-800",
+  Unmarked: "bg-gray-100 text-gray-500",
+};
+
+const AttendanceSheetPage: React.FC = () => {
+  const { data: classRooms } = useGetClassRoomsQuery();
+  const [classRoomId, setClassRoomId] = useState("");
+
+  const today = new Date();
+  const [range, setRange] = useState<{ from: Date; to: Date }>({
+    from: startOfMonth(today),
+    to: today,
+  });
+  const startDate = format(range.from, "yyyy-MM-dd");
+  const endDate = format(range.to, "yyyy-MM-dd");
+
+  const {
+    data: sheet,
+    isLoading,
+    isFetching,
+  } = useGetAttendanceSheetQuery(
+    { classRoomId, startDate, endDate },
+    { skip: !classRoomId },
+  );
+
+  const setThisMonth = () => setRange({ from: startOfMonth(today), to: today });
+  const setLastMonth = () => {
+    const lastMonth = subMonths(today, 1);
+    setRange({ from: startOfMonth(lastMonth), to: endOfMonth(lastMonth) });
+  };
+
+  const handleDownload = async () => {
+    if (!classRoomId) return;
+    try {
+      await downloadAttendanceSheet(classRoomId, startDate, endDate);
+    } catch {
+      toast.error("Could not export the sheet. Please try again.");
+    }
+  };
+  // ✅ PUT THIS INSTEAD:
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      <PageHeader
+        title="Attendance Sheet"
+        description="View monthly attendance reports and export records to Excel."
+      >
+        <Button
+          onClick={handleDownload}
+          disabled={!classRoomId || !sheet}
+          size="sm"
+          className="gap-2 shadow-xs"
+        >
+          <Download className="h-4 w-4" />
+          Export Sheet
+        </Button>
+      </PageHeader>
+
+      <Card className="border-border/70 shadow-xs">
+        <CardContent className="pt-6 flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-sm font-medium mb-2 block">Class</label>
+            <IdSelect
+              options={classRooms?.map((c) => ({ id: c.id, label: c.name }))}
+              value={classRoomId}
+              onValueChange={setClassRoomId}
+              placeholder="Select a class"
+              className="w-48"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={setThisMonth}>
+              This Month
+            </Button>
+            <Button variant="outline" size="sm" onClick={setLastMonth}>
+              Last Month
+            </Button>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-2 block">Date Range</label>
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button variant="outline" className="justify-start">
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(range.from, "MMM d")} –{" "}
+                    {format(range.to, "MMM d, yyyy")}
+                  </Button>
+                }
+              />
+            </Popover>
+          </div>
+        </CardContent>
+      </Card>
+
+      {classRoomId && (isLoading || isFetching) && (
+        <p className="text-sm text-muted-foreground">Loading sheet...</p>
+      )}
+
+      {sheet && (
+        <Card>
+          <CardContent className="pt-6 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="sticky left-0 bg-background">
+                    Student
+                  </TableHead>
+                  {sheet.dates.map((d) => (
+                    <TableHead
+                      key={d}
+                      className="text-center whitespace-nowrap"
+                    >
+                      {format(new Date(d), "MMM d")}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sheet.rows.map((row) => (
+                  <TableRow key={row.enrollmentId}>
+                    <TableCell className="sticky left-0 bg-background font-medium whitespace-nowrap">
+                      {row.studentName}
+                    </TableCell>
+                    {sheet.dates.map((d) => {
+                      const status = row.statusByDate[d] ?? "Unmarked";
+                      return (
+                        <TableCell key={d} className="text-center">
+                          <span
+                            className={`text-xs px-2 py-1 rounded ${STATUS_BADGE[status]}`}
+                          >
+                            {status[0]}
+                          </span>
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default AttendanceSheetPage;

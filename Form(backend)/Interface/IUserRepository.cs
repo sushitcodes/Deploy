@@ -1,0 +1,21 @@
+﻿using Form.Entities;
+
+
+namespace Form.Interfaces
+{
+    public interface IUserRepository
+    {
+        Task<int> CountByRoleAsync(UserRole role);
+        Task<User?> GetByEmailAsync(string email);
+        Task<User> AddAsync(User user);
+        Task UpdateAsync(User user);
+        Task<User?> GetByIdAsync(Guid id);
+        Task<List<User>> GetByRoleAsync(UserRole role);
+        Task SetActiveStatusAsync(Guid userId, bool isActive);
+
+        Task<List<Guid>> GetUserIdsByRoleAsync(UserRole role);
+        Task<List<Guid>> GetAllUserIdsAsync();
+        Task<List<Guid>> GetUserIdsByRolesAsync(IEnumerable<UserRole> roles);
+
+    }
+}

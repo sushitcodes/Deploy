@@ -256,9 +256,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     //                    IsDeleted instead, so the row survives in the DB.
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // One timestamp per save — every entity touched by this call gets the
-        // SAME value, instead of each entity computing DateTime.UtcNow separately
-        // and drifting by milliseconds.
         var now = DateTime.UtcNow;
 
         foreach (var entry in ChangeTracker.Entries())
@@ -272,13 +269,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 }
                 else if (entry.State == EntityState.Modified)
                 {
-                    auditable.UpdatedAt = now;
+                    // Only stamp UpdatedAt if at least one scalar property
+                    // was intentionally changed. This prevents nav-property
+                    // entities that were pulled in by Include() — and then
+                    // accidentally left in Modified state by the change tracker
+                    // — from being written back to the DB and throwing
+                    // DbUpdateConcurrencyException (0 rows affected).
+                    var hasRealChange = entry.Properties
+                        .Any(p => p.IsModified && !p.Metadata.IsForeignKey());
+
+                    if (hasRealChange)
+                        auditable.UpdatedAt = now;
+                    else
+                        entry.State = EntityState.Unchanged;
                 }
             }
 
             // Soft delete — intercept the delete BEFORE it reaches the database.
-            // Turning a DELETE into an UPDATE means the row is never physically
-            // removed; the global query filter (above) hides it from reads.
             if (entry.Entity is ISoftDelete softDeletable && entry.State == EntityState.Deleted)
             {
                 entry.State = EntityState.Modified;

@@ -137,11 +137,12 @@ builder.Services.AddAuthorization(options =>
 });// --- CORS: lets the Vite dev server (different port) call this API ---
 builder.Services.AddCors(options =>
 {
-options.AddPolicy("AllowFrontend", policy =>
-    policy.WithOrigins("http://localhost:5173")
-          .AllowAnyHeader()
-          .AllowAnyMethod()
-    .AllowCredentials());
+    var productionOrigin = builder.Configuration["Cors:Origin"] ?? "https://sushitschool.vercel.app";
+    options.AddPolicy("AllowFrontend", policy =>
+        policy.WithOrigins("http://localhost:5173", productionOrigin)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials());
 });
 builder.Services.AddRateLimiter(options =>
 {
@@ -166,41 +167,67 @@ using (var scope = app.Services.CreateScope())
     const string adminEmail = "SushitChaulagain8@gmail.com";
     const string adminPassword = "123456789";
 
-    var admin = await db.Users
-        .Include(u => u.RoleAssignments)
+    // Never use Include() here — tracking nav properties (RoleAssignments)
+    // and calling SaveChangesAsync causes DbUpdateConcurrencyException.
+    var adminScalar = await db.Users
+        .AsNoTracking()
         .FirstOrDefaultAsync(u => u.Email == adminEmail);
 
-    if (admin is null)
+    if (adminScalar is null)
     {
-        admin = new User
+        // Brand-new database — create user then role in two clean saves.
+        var newAdmin = new User
         {
             Email = adminEmail,
             PasswordHash = passwordHasher.Hash(adminPassword),
             IsActive = true
         };
+        db.Users.Add(newAdmin);
+        await db.SaveChangesAsync();
 
-        admin.RoleAssignments.Add(new UserRoleAssignment
+        db.UserRoleAssignments.Add(new UserRoleAssignment
         {
             Id = Guid.NewGuid(),
-            UserId = admin.Id,
+            UserId = newAdmin.Id,
             Role = UserRole.Admin
         });
-
-        db.Users.Add(admin);
         await db.SaveChangesAsync();
     }
-    else if (!admin.RoleAssignments.Any(r => r.Role == UserRole.Admin))
+    else
     {
-        admin.RoleAssignments.Add(new UserRoleAssignment
+        var adminId = adminScalar.Id;
+
+        // Check for duplicate role rows (can happen from prior bad seed runs)
+        // and clean them up — keep exactly one Admin row.
+        var allAdminRoles = await db.UserRoleAssignments
+            .Where(ra => ra.UserId == adminId && ra.Role == UserRole.Admin)
+            .ToListAsync();
+
+        if (allAdminRoles.Count == 0)
         {
-            Id = Guid.NewGuid(),
-            UserId = admin.Id,
-            Role = UserRole.Admin
-        });
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.NewGuid(),
+                UserId = adminId,
+                Role = UserRole.Admin
+            });
+            await db.SaveChangesAsync();
+        }
+        else if (allAdminRoles.Count > 1)
+        {
+            db.UserRoleAssignments.RemoveRange(allAdminRoles.Skip(1));
+            await db.SaveChangesAsync();
+        }
 
-        admin.IsActive = true;
-
-        await db.SaveChangesAsync();
+        // Always re-stamp password and IsActive so the seeded credentials
+        // are guaranteed correct on every startup, regardless of DB history.
+        var adminUser = await db.Users.FindAsync(adminId);
+        if (adminUser is not null)
+        {
+            adminUser.PasswordHash = passwordHasher.Hash(adminPassword);
+            adminUser.IsActive = true;
+            await db.SaveChangesAsync();
+        }
     }
 }
 

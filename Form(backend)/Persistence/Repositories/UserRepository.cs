@@ -21,7 +21,22 @@ public class UserRepository(AppDbContext _context) : IUserRepository
     }
     public async Task UpdateAsync(User user)
     {
-        _context.Users.Update(user);
+        // Use Update(user) only on the scalar columns we own — do NOT let EF
+        // walk the RoleAssignments navigation and issue UPDATE statements for
+        // rows it didn't load in this request. Calling Update() on a detached
+        // entity that has navigation properties marks every child as Modified,
+        // which causes DbUpdateConcurrencyException when those UPDATE commands
+        // touch 0 rows (the FK UserId may differ from what's in the DB).
+        //
+        // Instead: look up the tracked row, copy only the fields that can
+        // legitimately change, and save. RoleAssignments are never touched here.
+        var tracked = await _context.Users.FindAsync(user.Id);
+        if (tracked is null) return;
+
+        tracked.PasswordHash = user.PasswordHash;
+        tracked.IsActive = user.IsActive;
+        tracked.Email = user.Email;
+
         await _context.SaveChangesAsync();
     }
     public async Task<User?> GetByIdAsync(Guid id) =>

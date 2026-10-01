@@ -23,16 +23,16 @@ public class UserProfileRepository(AppDbContext _context) : IUserProfileReposito
 
     public async Task<UserProfile?> UpdateAsync(Guid userId, UserProfile updated)
     {
+        // Do NOT include p.User here. Including a navigation property tracks
+        // it, and SaveChangesAsync will then emit UPDATE [Users] for a row we
+        // never intended to change — potentially hitting 0 rows on a stale
+        // entity and throwing DbUpdateConcurrencyException.
+        // The caller (MapToDto) needs p.User.Email — re-fetch it read-only below.
         var existing = await _context.UserProfiles
-            .Include(p => p.User)
             .FirstOrDefaultAsync(p => p.UserId == userId);
 
         if (existing is null) return null;
 
-        // FullName line REMOVED — this is the actual enforcement point from
-        // last message. Self-edit can never change it, no matter what gets
-        // passed into `updated`, because this method physically never reads
-        // updated.FullName anymore.
         existing.Address = updated.Address;
         existing.Gender = updated.Gender;
         existing.PhoneNumbers = updated.PhoneNumbers;
@@ -43,6 +43,12 @@ public class UserProfileRepository(AppDbContext _context) : IUserProfileReposito
         existing.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
+
+        // Re-attach User as no-tracking so MapToDto can read Email/IsActive.
+        existing.User = await _context.Users
+            .AsNoTracking()
+            .FirstAsync(u => u.Id == userId);
+
         return existing;
     }
 
@@ -99,12 +105,20 @@ public class UserProfileRepository(AppDbContext _context) : IUserProfileReposito
 
     public async Task<UserProfile?> AdminUpdateNameAsync(Guid userId, string fullName)
     {
-        var existing = await _context.UserProfiles.Include(p => p.User).FirstOrDefaultAsync(p => p.UserId == userId);
+        // No Include(p => p.User) — same reason as UpdateAsync above.
+        var existing = await _context.UserProfiles
+            .FirstOrDefaultAsync(p => p.UserId == userId);
         if (existing is null) return null;
 
         existing.FullName = fullName;
         existing.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        // Re-attach User read-only so MapToDto can access Email/IsActive.
+        existing.User = await _context.Users
+            .AsNoTracking()
+            .FirstAsync(u => u.Id == userId);
+
         return existing;
     }
 }

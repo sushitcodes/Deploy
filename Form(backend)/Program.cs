@@ -1,4 +1,5 @@
 using Form.Authorization;
+using Form.Entities;
 using Form.Exceptions;
 using Form.FileStorage;
 using Form.Hubs;
@@ -155,6 +156,58 @@ builder.Services.AddRateLimiter(options =>
 
 
 var app = builder.Build();
+//sedding password and role
+// Seed default admin account
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+
+    const string adminEmail = "SushitChaulagain8@gmail.com";
+    const string adminPassword = "123456789";
+
+    var admin = await db.Users
+        .Include(u => u.RoleAssignments)
+        .FirstOrDefaultAsync(u => u.Email == adminEmail);
+
+    if (admin is null)
+    {
+        admin = new User
+        {
+            Email = adminEmail,
+            PasswordHash = passwordHasher.Hash(adminPassword),
+            IsActive = true
+        };
+
+        admin.RoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            UserId = admin.Id,
+            Role = UserRole.Admin
+        });
+
+        db.Users.Add(admin);
+        await db.SaveChangesAsync();
+    }
+    else if (!admin.RoleAssignments.Any(r => r.Role == UserRole.Admin))
+    {
+        admin.RoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            UserId = admin.Id,
+            Role = UserRole.Admin
+        });
+
+        admin.IsActive = true;
+
+        await db.SaveChangesAsync();
+    }
+}
+
+
+
+
+
 
 if (app.Environment.IsDevelopment())
 {

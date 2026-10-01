@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router-dom";
+import { useAppSelector } from "./infrastructure/store/hooks";
 import FormPage from "./presentation/pages/FormPage";
 import SubmissionPage from "./presentation/pages/SubmissionPage";
 import SubmissionsListPage from "./presentation/pages/SubmissionsListPage";
@@ -25,13 +26,13 @@ import ReportCardPage from "./presentation/pages/ReportCardPage";
 import AdminBroadcastPage from "./presentation/pages/AdminBroadcastPage";
 
 function App() {
-  const { isLoading } = useGetMeQuery();
+  useGetMeQuery();
+  const isInitialized = useAppSelector((state) => state.auth.isInitialized);
 
-  // Block ALL route rendering until the /me check completes.
-  // Without this, ProtectedRoute briefly sees email=null (initial Redux
-  // state) before the /me response arrives, flashing the login page or
-  // the protected page for 1-2 frames before redirecting correctly.
-  if (isLoading) return null;
+  // Wait until /me has settled (success OR 401+refresh failure) before
+  // rendering any routes. This prevents the flash where ProtectedRoute
+  // briefly sees email=null and redirects to /login before auth resolves.
+  if (!isInitialized) return null;
 
   return (
     <>

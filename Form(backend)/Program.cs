@@ -157,12 +157,17 @@ builder.Services.AddRateLimiter(options =>
 
 
 var app = builder.Build();
-//sedding password and role
-// Seed default admin account
+
+// Apply migrations and seed on startup.
+// MigrateAsync() is idempotent — it only runs pending migrations,
+// so it's safe to call on every startup on both local and production.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+
+    // Step 1: ensure the schema exists before any query touches it.
+    await db.Database.MigrateAsync();
 
     const string adminEmail = "SushitChaulagain8@gmail.com";
     const string adminPassword = "123456789";

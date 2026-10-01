@@ -25,7 +25,13 @@ import ReportCardPage from "./presentation/pages/ReportCardPage";
 import AdminBroadcastPage from "./presentation/pages/AdminBroadcastPage";
 
 function App() {
-  useGetMeQuery();
+  const { isLoading } = useGetMeQuery();
+
+  // Block ALL route rendering until the /me check completes.
+  // Without this, ProtectedRoute briefly sees email=null (initial Redux
+  // state) before the /me response arrives, flashing the login page or
+  // the protected page for 1-2 frames before redirecting correctly.
+  if (isLoading) return null;
 
   return (
     <>

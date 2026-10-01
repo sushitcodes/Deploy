@@ -71,7 +71,7 @@ public class UserProfileService : IUserProfileService
 
         var updated = await _repository.UpdateAsync(userId, new UserProfile
         {
-            Address = request.Address,
+            Address = request.Address ?? string.Empty,
             Gender = parsedGender,
             PhoneNumbers = request.PhoneNumbers,
             AvatarUrl = avatarUrl ?? string.Empty,

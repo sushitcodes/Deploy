@@ -43,8 +43,14 @@ export const userApi = api.injectEndpoints({
         url: "/users/me/profile",
         method: "PUT",
         body: formData,
+        // Do NOT set Content-Type here. When body is FormData the browser
+        // must set it automatically as "multipart/form-data; boundary=..."
+        // with the correct boundary token. If RTK Query sets
+        // "application/json" instead, ASP.NET Core can't parse the fields
+        // and returns 400 "One or more validation errors occurred".
+        formData: true,
       }),
-      invalidatesTags: ["UserProfile", "Submission"], // so UsersListPage refetches and shows the new person
+      invalidatesTags: ["UserProfile", "Submission"],
     }),
     updateUserName: builder.mutation<
       UserProfile,

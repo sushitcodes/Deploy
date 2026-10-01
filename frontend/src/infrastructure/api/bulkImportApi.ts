@@ -20,6 +20,7 @@ export const bulkImportApi = api.injectEndpoints({
           url: "/bulkimport/students",
           method: "POST",
           body: formData,
+          formData: true,
         };
       },
       // Adding students affects the user list, the class roster, and the

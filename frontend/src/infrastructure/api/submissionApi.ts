@@ -39,9 +39,8 @@ export const submissionApi = api.injectEndpoints({
         url: "/submissions",
         method: "POST",
         body: formData,
+        formData: true,
       }),
-      // Now that Dashboard lives in the SAME tag registry as dashboardApi's
-      // queries, this line finally does what it always looked like it did.
       invalidatesTags: ["Submission", "Dashboard"],
     }),
 
@@ -53,6 +52,7 @@ export const submissionApi = api.injectEndpoints({
         url: `/submissions/${id}`,
         method: "PUT",
         body: formData,
+        formData: true,
       }),
       invalidatesTags: ["Submission", "Dashboard"],
     }),
